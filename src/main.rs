@@ -19,8 +19,8 @@ struct Args {
     user_agent: String,
     #[clap(long, default_value = "content")]
     path: String,
-    #[clap(long, default_values = [".git"])]
-    ignored_directories: Vec<String>,
+    #[clap(long, default_value = "true")]
+    ignore_hidden_directories: bool,
     #[clap(long, default_values = ["yml", "yaml"])]
     supported_extensions: Vec<String>,
     #[clap(long, default_value = "300")]
@@ -110,13 +110,24 @@ async fn async_watch(args: Args) -> Result<()> {
 
 fn should_be_applied(path: &Path, args: &Args) -> bool {
     let path_str = path.to_str().unwrap();
-    // ignore directories in the list
-    for ignore_directory in &args.ignored_directories {
-        if path_str.contains(ignore_directory) {
-            trace!("path is ignored directory: {}", path_str);
+
+    if args.ignore_hidden_directories {
+        if path
+            .components()
+            .find(|e| {
+                let string = e.as_os_str().to_str().unwrap();
+                if string.starts_with(".") && string.len() > 1 {
+                    return true;
+                }
+                return false;
+            })
+            .is_some()
+        {
+            trace!("path is within hidden directory: {}", path_str);
             return false;
         }
     }
+
     // ignore files without the supported extension
     if let Some(extension) = path.extension() {
         if !&args
