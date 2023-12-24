@@ -1,0 +1,21 @@
+[package]
+name = "kapplier"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+clap = { version = "4.4.11", features = ["derive"] }
+futures = "0.3.29"
+k8s-openapi = { version = "0.20.0", features = ["latest"] }
+kube = { version = "0.87.1", features = ["runtime", "derive"] }
+log = "0.4.20"
+notify = "6.1.1"
+serde = "1.0.193"
+serde_json = "1.0.108"
+serde_yaml = "0.9.27"
+simple_logger = "4.3.0"
+tokio = { version = "1.35.0", features = ["full"] }
+walkdir = "2.4.0"
