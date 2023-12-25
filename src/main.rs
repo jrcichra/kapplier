@@ -1,14 +1,8 @@
-use std::{path::Path, process, thread, time::Duration};
-
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
-use futures::{
-    channel::mpsc::{channel, Receiver},
-    SinkExt, StreamExt,
-};
 use kube::{Client, Discovery};
-use log::{error, info, trace};
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use log::{info, trace};
+use std::{path::Path, process, thread, time::Duration};
 use walkdir::WalkDir;
 pub mod kubeclient;
 
@@ -33,6 +27,7 @@ async fn main() -> Result<()> {
     simple_logger::init_with_level(log::Level::Info)?;
     let args = Args::parse();
     let full_run_args = args.clone();
+    let reconcile_args: Args = args.clone();
 
     // handle control c
     ctrlc::set_handler(move || {
@@ -41,14 +36,17 @@ async fn main() -> Result<()> {
         process::exit(0);
     })?;
 
+    // build client
+    let client = Client::try_default().await?;
+    let discovery = Discovery::new(client.clone()).run().await?;
+
     // wait for directory to exist
     info!("waiting for path to exist: {}...", &args.path);
     while !Path::new(&args.path).exists() {
         thread::sleep(Duration::from_secs(1));
     }
 
-    // full run thread
-    tokio::spawn(async move {
+    let full_run_task = tokio::spawn(async move {
         let args = full_run_args;
         // TODO: use one client for both threads
         // TODO: proper error handling
@@ -78,44 +76,50 @@ async fn main() -> Result<()> {
         }
     });
 
-    // file watch loop
-    async_watch(args).await?;
+    let reconcile_task = tokio::spawn(async move {
+        let args = reconcile_args;
+        let mut last_git_content = "".to_string();
+        loop {
+            let current_git_contents =
+                tokio::fs::read_to_string(Path::new(&args.path).join(".git"))
+                    .await
+                    .unwrap();
+            if current_git_contents != last_git_content {
+                match reconcile(&args, &client, &discovery).await {
+                    Err(e) => {
+                        info!("reconcile error: {:?}", e);
+                    }
+                    Ok(_) => {}
+                };
+            }
+            last_git_content = current_git_contents;
+            // check if the file contents match every second
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+
+    // wait for threads to finish
+    full_run_task.await?;
+    reconcile_task.await?;
 
     Ok(())
 }
 
-fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
-    let (mut tx, rx) = channel(1);
-
-    // Automatically select the best implementation for your platform.
-    // You can also access each implementation directly e.g. INotifyWatcher.
-    let watcher = RecommendedWatcher::new(
-        move |res| {
-            futures::executor::block_on(async {
-                tx.send(res).await.unwrap();
-            })
-        },
-        Config::default(),
-    )?;
-
-    Ok((watcher, rx))
-}
-
-async fn async_watch(args: Args) -> Result<()> {
-    let (mut watcher, mut rx) = async_watcher()?;
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
-    watcher.watch(args.path.as_ref(), RecursiveMode::Recursive)?;
-
-    let client = Client::try_default().await?;
-    let discovery = Discovery::new(client.clone()).run().await?;
-
-    while let Some(res) = rx.next().await {
-        match res {
-            Ok(event) => {
-                reconcile(&args, &event, &client, &discovery).await;
-            }
-            Err(e) => error!("watch error: {:?}", e),
+async fn reconcile(args: &Args, client: &Client, discovery: &Discovery) -> Result<()> {
+    let walker = WalkDir::new(&args.path).into_iter();
+    for path in walker {
+        let path = path.context("could not unwrap path")?;
+        if should_be_applied(path.path(), args) {
+            // trigger a kubectl apply update
+            kubeclient::apply(
+                client.to_owned(),
+                &discovery,
+                path.path()
+                    .to_str()
+                    .context("could not convert path to str")?,
+                &args.user_agent,
+            )
+            .await?;
         }
     }
     Ok(())
@@ -155,28 +159,4 @@ fn should_be_applied(path: &Path, args: &Args) -> bool {
         return false;
     }
     return true;
-}
-
-async fn reconcile(args: &Args, event: &Event, client: &Client, discovery: &Discovery) {
-    // TODO: make filtering better
-    if event.kind.is_access() || event.kind.is_other() || event.kind.is_remove() {
-        trace!("event is intentionally excluded: {:?}", event.kind);
-        return;
-    }
-    for path in &event.paths {
-        if should_be_applied(path, args) {
-            // trigger a kubectl apply update
-            let res = kubeclient::apply(
-                client.to_owned(),
-                &discovery,
-                path.to_str().unwrap(),
-                &args.user_agent,
-            )
-            .await;
-            if let Err(x) = res {
-                error!("apply error: {}", x);
-                return;
-            }
-        }
-    }
 }

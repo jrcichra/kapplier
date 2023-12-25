@@ -4,7 +4,7 @@ A simpler (and faster) alternative to [kube-applier](https://github.com/box/kube
 
 No GUI, no `git`, no `kubectl`. Only requires a directory to watch.
 
-Expected to be used with a [git-sync](https://github.com/kubernetes/git-sync) sidecar.
+Expected to be used with a [git-sync](https://github.com/kubernetes/git-sync) sidecar >=v4.
 
 ```
 Usage: kapplier [OPTIONS]

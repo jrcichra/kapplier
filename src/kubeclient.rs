@@ -5,7 +5,7 @@ use kube::{
     discovery::{ApiCapabilities, ApiResource, Scope},
     Api, Client, Discovery, ResourceExt,
 };
-use log::{info, trace, warn};
+use log::{info, warn};
 
 // https://github.com/kube-rs/kube/blob/main/examples/kubectl.rs#L249
 fn multidoc_deserialize(data: &str) -> Result<Vec<serde_yaml::Value>> {
