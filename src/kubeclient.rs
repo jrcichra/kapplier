@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use clap::Parser;
 use kube::{
     api::{Patch, PatchParams},
     core::{DynamicObject, GroupVersionKind},
@@ -7,19 +6,6 @@ use kube::{
     Api, Client, Discovery, ResourceExt,
 };
 use log::{info, trace, warn};
-
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    #[clap(long, default_value = "kapplier")]
-    user_agent: String,
-    #[clap(long, default_value = ".")]
-    directory: String,
-    #[clap(long, default_values = [".git"])]
-    ignore_directories: Vec<String>,
-    #[clap(long, default_values = ["yml", "yaml"])]
-    supported_extensions: Vec<String>,
-}
 
 // https://github.com/kube-rs/kube/blob/main/examples/kubectl.rs#L249
 fn multidoc_deserialize(data: &str) -> Result<Vec<serde_yaml::Value>> {

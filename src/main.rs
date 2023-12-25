@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::{path::Path, process, time::Duration};
 
 use anyhow::Result;
 use clap::Parser;
@@ -33,6 +33,13 @@ async fn main() -> Result<()> {
     simple_logger::init_with_level(log::Level::Info)?;
     let args = Args::parse();
     let full_run_args = args.clone();
+
+    // handle control c
+    ctrlc::set_handler(move || {
+        info!("received Ctrl+C! Exiting...");
+        // exit immediately
+        process::exit(0);
+    })?;
 
     // full run thread
     tokio::spawn(async move {
