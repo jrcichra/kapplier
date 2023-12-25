@@ -15,7 +15,7 @@ lazy_static! {
    pub static ref RUN_LATENCY: GaugeVec = register_gauge_vec!(
         "run_latency_seconds",
         "Latency for completed apply runs",
-        &["success","run_type"]
+        &["success","file"]
     )
     .unwrap();
 }

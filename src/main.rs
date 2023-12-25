@@ -10,11 +10,6 @@ use walkdir::WalkDir;
 pub mod kubeclient;
 pub mod prometheus;
 
-enum RunType {
-    Full,
-    Quick,
-}
-
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
@@ -76,7 +71,7 @@ async fn main() -> Result<()> {
         let discovery = Discovery::new(client.clone()).run().await.unwrap();
         loop {
             info!("starting full run");
-            match reconcile(&args, &full_path_clone, &client, &discovery, RunType::Full).await {
+            match reconcile(&args, &full_path_clone, &client, &discovery).await {
                 Err(e) => {
                     info!("reconcile error: {:?}", e);
                 }
@@ -98,7 +93,7 @@ async fn main() -> Result<()> {
             let current_git_link = tokio::fs::read_link(&args.path).await.unwrap();
             if last_git_link != current_git_link {
                 info!("starting quick run");
-                match reconcile(&args, &full_path, &client, &discovery, RunType::Quick).await {
+                match reconcile(&args, &full_path, &client, &discovery).await {
                     Err(e) => {
                         info!("reconcile error: {:?}", e);
                     }
@@ -125,9 +120,7 @@ async fn reconcile(
     full_path: &str,
     client: &Client,
     discovery: &Discovery,
-    run_type: RunType,
 ) -> Result<()> {
-    info!("full path: {}", full_path);
     let walker = WalkDir::new(full_path).sort_by_file_name().into_iter();
     for entry in walker {
         let entry = entry.context("could not unwrap entry")?;
@@ -142,13 +135,9 @@ async fn reconcile(
             kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent).await;
         let elapsed = now.elapsed();
         let success = &res.is_ok().to_string();
-        let run_type_string = match run_type {
-            RunType::Full => "FullRun",
-            RunType::Quick => "QuickRun",
-        };
 
         RUN_LATENCY
-            .with_label_values(&[success, run_type_string])
+            .with_label_values(&[success, path_str])
             .set(elapsed.as_secs_f64());
         FILE_APPLY_COUNT
             .with_label_values(&[success, path_str])
