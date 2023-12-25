@@ -42,24 +42,23 @@ pub async fn apply(
     user_agent: &str,
 ) -> Result<()> {
     let ssapply = PatchParams::apply(user_agent).force();
-    let yaml = std::fs::read_to_string(path).with_context(|| format!("Failed to read {}", path))?;
+    let yaml = std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
     for doc in multidoc_deserialize(&yaml)? {
         let obj: DynamicObject = serde_yaml::from_value(doc)?;
         let namespace = obj.metadata.namespace.as_deref();
         let gvk = if let Some(tm) = &obj.types {
             GroupVersionKind::try_from(tm)?
         } else {
-            bail!("Cannot apply object without valid TypeMeta {:?}", obj);
+            bail!("cannot apply object without valid TypeMeta {:?}", obj);
         };
         let name = obj.name_any();
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, client.clone(), namespace, false);
-            trace!("Applying {}: \n{}", gvk.kind, serde_yaml::to_string(&obj)?);
             let data: serde_json::Value = serde_json::to_value(&obj)?;
             let _r = api.patch(&name, &ssapply, &Patch::Apply(data)).await?;
-            info!("Applied {} {}", gvk.kind, name);
+            info!("applied {}: {} {}", &path, gvk.kind, name);
         } else {
-            warn!("Cannot apply document for unknown {:?}", gvk);
+            warn!("cannot apply document for unknown {:?}", gvk);
         }
     }
     Ok(())
