@@ -12,7 +12,7 @@ Usage: kapplier [OPTIONS]
 Options:
       --user-agent <USER_AGENT>                                [default: kapplier]
       --path <PATH>                                            [default: repo]
-      --subpath <SUBPATH>                                      [default: dist]
+      --subpath <SUBPATH>                                      [default: ]
       --ignore-hidden-directories
       --supported-extensions <SUPPORTED_EXTENSIONS>            [default: yml yaml]
       --full-run-interval-seconds <FULL_RUN_INTERVAL_SECONDS>  [default: 300]
