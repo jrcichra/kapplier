@@ -121,25 +121,29 @@ async fn reconcile(
     client: &Client,
     discovery: &Discovery,
 ) -> Result<()> {
+    info!("full path: {}", full_path);
     let walker = WalkDir::new(full_path).into_iter();
-    for path in walker {
-        let path = path.context("could not unwrap path")?;
-        let path = path.path();
+    for entry in walker {
+        let entry = entry.context("could not unwrap entry")?;
+        let path = entry.path();
         let path_str = path.to_str().context("could not convert path to str")?;
-        if should_be_applied(path, args) {
-            // trigger a kubectl apply update
-            let now = Instant::now();
-            let res =
-                kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent).await;
-            let elapsed = now.elapsed();
-            let success = &res.is_ok().to_string();
+        if !should_be_applied(path, args) {
+            continue;
+        }
+        // trigger a kubectl apply update
+        let now = Instant::now();
+        let res =
+            kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent).await;
+        let elapsed = now.elapsed();
+        let success = &res.is_ok().to_string();
 
-            RUN_LATENCY
-                .with_label_values(&[success, "QuickRun"])
-                .set(elapsed.as_secs_f64());
-            FILE_APPLY_COUNT
-                .with_label_values(&[success, path_str])
-                .inc();
+        RUN_LATENCY
+            .with_label_values(&[success, "QuickRun"])
+            .set(elapsed.as_secs_f64());
+        FILE_APPLY_COUNT
+            .with_label_values(&[success, path_str])
+            .inc();
+        if res.is_err() {
             return res;
         }
     }
