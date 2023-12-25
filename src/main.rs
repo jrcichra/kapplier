@@ -2,7 +2,11 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use kube::{Client, Discovery};
 use log::{info, trace};
-use std::{path::Path, process, thread, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    process, thread,
+    time::Duration,
+};
 use walkdir::WalkDir;
 pub mod kubeclient;
 
@@ -36,10 +40,6 @@ async fn main() -> Result<()> {
         process::exit(0);
     })?;
 
-    // build client
-    let client = Client::try_default().await?;
-    let discovery = Discovery::new(client.clone()).run().await?;
-
     // wait for directory to exist
     info!("waiting for path to exist: {}...", &args.path);
     while !Path::new(&args.path).exists() {
@@ -48,7 +48,6 @@ async fn main() -> Result<()> {
 
     let full_run_task = tokio::spawn(async move {
         let args = full_run_args;
-        // TODO: use one client for both threads
         // TODO: proper error handling
         let client = Client::try_default().await.unwrap();
         let discovery = Discovery::new(client.clone()).run().await.unwrap();
@@ -78,13 +77,13 @@ async fn main() -> Result<()> {
 
     let reconcile_task = tokio::spawn(async move {
         let args = reconcile_args;
-        let mut last_git_content = "".to_string();
+        // TODO: proper error handling
+        let client = Client::try_default().await.unwrap();
+        let discovery = Discovery::new(client.clone()).run().await.unwrap();
+        let mut last_git_link = tokio::fs::read_link(&args.path).await.unwrap();
         loop {
-            let current_git_contents =
-                tokio::fs::read_to_string(Path::new(&args.path).join(".git"))
-                    .await
-                    .unwrap();
-            if current_git_contents != last_git_content {
+            let current_git_link = tokio::fs::read_link(&args.path).await.unwrap();
+            if last_git_link != current_git_link {
                 match reconcile(&args, &client, &discovery).await {
                     Err(e) => {
                         info!("reconcile error: {:?}", e);
@@ -92,7 +91,7 @@ async fn main() -> Result<()> {
                     Ok(_) => {}
                 };
             }
-            last_git_content = current_git_contents;
+            last_git_link = current_git_link;
             // check if the file contents match every second
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
