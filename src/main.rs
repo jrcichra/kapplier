@@ -71,23 +71,12 @@ async fn main() -> Result<()> {
         let discovery = Discovery::new(client.clone()).run().await.unwrap();
         loop {
             info!("starting full run");
-            let walker = WalkDir::new(&full_path_clone).into_iter();
-            // go through all files in the path
-            for entry in walker {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                if !should_be_applied(&path, &args) {
-                    continue;
+            match reconcile(&args, &full_path_clone, &client, &discovery).await {
+                Err(e) => {
+                    info!("reconcile error: {:?}", e);
                 }
-                kubeclient::apply(
-                    client.to_owned(),
-                    &discovery,
-                    path.to_str().unwrap(),
-                    &args.user_agent,
-                )
-                .await
-                .unwrap();
-            }
+                Ok(_) => {}
+            };
             info!("full run complete");
             tokio::time::sleep(Duration::from_secs(args.full_run_interval_seconds)).await;
         }
