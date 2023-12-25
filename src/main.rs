@@ -92,12 +92,14 @@ async fn main() -> Result<()> {
             // TODO: replace with inotify on the .git file contents
             let current_git_link = tokio::fs::read_link(&args.path).await.unwrap();
             if last_git_link != current_git_link {
+                info!("starting quick run");
                 match reconcile(&args, &full_path, &client, &discovery).await {
                     Err(e) => {
                         info!("reconcile error: {:?}", e);
                     }
                     Ok(_) => {}
                 };
+                info!("quick run complete");
             }
             last_git_link = current_git_link;
             // check if the file contents match every second
