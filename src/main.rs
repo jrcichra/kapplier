@@ -159,7 +159,7 @@ fn should_be_applied(path: &Path, args: &Args) -> bool {
 
 async fn reconcile(args: &Args, event: &Event, client: &Client, discovery: &Discovery) {
     // TODO: make filtering better
-    if event.kind.is_access() || event.kind.is_other() {
+    if event.kind.is_access() || event.kind.is_other() || event.kind.is_remove() {
         trace!("event is intentionally excluded: {:?}", event.kind);
         return;
     }
