@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0.76"
 axum = "0.7.2"
 clap = { version = "4.4.11", features = ["derive"] }
-ctrlc = "3.4.2"
+ctrlc = { version = "3.4.2", features = ["termination"] }
 futures = "0.3.30"
 k8s-openapi = { version = "0.20.0", features = ["latest"] }
 kube = { version = "0.87.2", features = ["runtime", "derive"] }
