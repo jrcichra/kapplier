@@ -122,7 +122,7 @@ async fn reconcile(
     discovery: &Discovery,
 ) -> Result<()> {
     info!("full path: {}", full_path);
-    let walker = WalkDir::new(full_path).into_iter();
+    let walker = WalkDir::new(full_path).sort_by_file_name().into_iter();
     for entry in walker {
         let entry = entry.context("could not unwrap entry")?;
         let path = entry.path();
