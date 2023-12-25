@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     }
 
     // handle control c
-    ctrlc::set_handler(move || {
+    ctrlc::try_set_handler(move || {
         info!("received Ctrl+C! Exiting...");
         // exit immediately
         process::exit(0);
