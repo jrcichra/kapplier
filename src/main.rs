@@ -13,7 +13,7 @@ struct Args {
     user_agent: String,
     #[clap(long, default_value = "repo")]
     path: String,
-    #[clap(long, default_value = "dist")]
+    #[clap(long, default_value = "")]
     subpath: String,
     #[clap(long, default_value = "true")]
     ignore_hidden_directories: bool,
@@ -30,7 +30,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     let full_run_args = args.clone();
     let reconcile_args: Args = args.clone();
-    let full_path = format!("{}/{}", &args.path, &args.subpath);
+    let mut full_path = args.path.clone();
+    if !args.subpath.is_empty() {
+        full_path = format!("{}/{}", &args.path, &args.subpath);
+    }
 
     // handle control c
     ctrlc::set_handler(move || {
