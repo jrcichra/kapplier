@@ -16,6 +16,7 @@ Options:
       --ignore-hidden-directories
       --supported-extensions <SUPPORTED_EXTENSIONS>            [default: yml yaml]
       --full-run-interval-seconds <FULL_RUN_INTERVAL_SECONDS>  [default: 300]
+      --metrics-port <METRICS_PORT>                            [default: 9100]
   -h, --help                                                   Print help
   -V, --version                                                Print version
 ```
