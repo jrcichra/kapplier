@@ -7,7 +7,7 @@ lazy_static! {
     pub static ref FILE_APPLY_COUNT: GaugeVec = register_gauge_vec!(
         "file_apply_count",
         "Success metric for every file applied",
-        &["file", "success"]
+        &["success","file"]
     )
     .unwrap();
 
@@ -15,7 +15,7 @@ lazy_static! {
    pub static ref RUN_LATENCY: GaugeVec = register_gauge_vec!(
         "run_latency_seconds",
         "Latency for completed apply runs",
-        &["run_type","success"]
+        &["success","run_type"]
     )
     .unwrap();
 }
