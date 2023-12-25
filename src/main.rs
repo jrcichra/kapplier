@@ -1,10 +1,14 @@
 use anyhow::{Context, Result};
+use axum::{routing::get, Router};
 use clap::Parser;
 use kube::{Client, Discovery};
 use log::{info, trace};
+use prometheus::{FILE_APPLY_COUNT, RUN_LATENCY};
 use std::{path::Path, process, thread, time::Duration};
+use tokio::{net::TcpListener, time::Instant};
 use walkdir::WalkDir;
 pub mod kubeclient;
+pub mod prometheus;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -21,6 +25,8 @@ struct Args {
     supported_extensions: Vec<String>,
     #[clap(long, default_value = "300")]
     full_run_interval_seconds: u64,
+    #[clap(long, default_value = "9100")]
+    metrics_port: u16,
 }
 
 #[tokio::main]
@@ -41,6 +47,15 @@ async fn main() -> Result<()> {
         // exit immediately
         process::exit(0);
     })?;
+
+    // web server for metrics
+    let metrics_task = tokio::spawn(async move {
+        let app = Router::new().route("/metrics", get(prometheus::gather_metrics));
+        let bind = format!("0.0.0.0:{}", args.metrics_port);
+        let listener = TcpListener::bind(&bind).await.unwrap();
+        info!("listening on {}", &bind);
+        axum::serve(listener, app).await.unwrap();
+    });
 
     // wait for directory to exist
     info!("waiting for path to exist: {}...", &full_path);
@@ -85,6 +100,7 @@ async fn main() -> Result<()> {
         let discovery = Discovery::new(client.clone()).run().await.unwrap();
         let mut last_git_link = tokio::fs::read_link(&args.path).await.unwrap();
         loop {
+            // TODO: replace with inotify on the .git file contents
             let current_git_link = tokio::fs::read_link(&args.path).await.unwrap();
             if last_git_link != current_git_link {
                 match reconcile(&args, &full_path, &client, &discovery).await {
@@ -101,6 +117,7 @@ async fn main() -> Result<()> {
     });
 
     // wait for threads to finish
+    metrics_task.await?;
     full_run_task.await?;
     reconcile_task.await?;
 
@@ -116,17 +133,23 @@ async fn reconcile(
     let walker = WalkDir::new(full_path).into_iter();
     for path in walker {
         let path = path.context("could not unwrap path")?;
-        if should_be_applied(path.path(), args) {
+        let path = path.path();
+        let path_str = path.to_str().context("could not convert path to str")?;
+        if should_be_applied(path, args) {
             // trigger a kubectl apply update
-            kubeclient::apply(
-                client.to_owned(),
-                &discovery,
-                path.path()
-                    .to_str()
-                    .context("could not convert path to str")?,
-                &args.user_agent,
-            )
-            .await?;
+            let now = Instant::now();
+            let res =
+                kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent).await;
+            let elapsed = now.elapsed();
+            let success = &res.is_ok().to_string();
+
+            RUN_LATENCY
+                .with_label_values(&[success, "QuickRun"])
+                .set(elapsed.as_secs_f64());
+            FILE_APPLY_COUNT
+                .with_label_values(&[success, path_str])
+                .inc();
+            return res;
         }
     }
     Ok(())
