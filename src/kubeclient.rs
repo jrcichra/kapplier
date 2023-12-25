@@ -56,7 +56,7 @@ pub async fn apply(
             let api = dynamic_api(ar, caps, client.clone(), namespace, false);
             let data: serde_json::Value = serde_json::to_value(&obj)?;
             let _r = api.patch(&name, &ssapply, &Patch::Apply(data)).await?;
-            info!("applied {}: {} {}", &path, gvk.kind, name);
+            info!("applied {}: {} {}", path, gvk.kind, name);
         } else {
             warn!("cannot apply document for unknown {:?}", gvk);
         }
