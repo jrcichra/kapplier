@@ -1,4 +1,4 @@
-use std::{path::Path, process, time::Duration};
+use std::{path::Path, process, thread, time::Duration};
 
 use anyhow::Result;
 use clap::Parser;
@@ -40,6 +40,12 @@ async fn main() -> Result<()> {
         // exit immediately
         process::exit(0);
     })?;
+
+    // wait for directory to exist
+    info!("waiting for path to exist: {}...", &args.path);
+    while !Path::new(&args.path).exists() {
+        thread::sleep(Duration::from_secs(1));
+    }
 
     // full run thread
     tokio::spawn(async move {
