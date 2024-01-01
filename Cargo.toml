@@ -20,6 +20,6 @@ prometheus = { version = "0.13.3", features = ["process"] }
 serde = "1.0.193"
 serde_json = "1.0.108"
 serde_yaml = "0.9.29"
-simple_logger = "4.3.0"
+simple_logger = "4.3.3"
 tokio = { version = "1.35.1", features = ["full"] }
 walkdir = "2.4.0"
