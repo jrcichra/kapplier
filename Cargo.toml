@@ -19,7 +19,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 prometheus = { version = "0.13.3", features = ["process"] }
 serde = "1.0.194"
 serde_json = "1.0.110"
-serde_yaml = "0.9.29"
+serde_yaml = "0.9.30"
 simple_logger = "4.3.3"
 tokio = { version = "1.35.1", features = ["full"] }
 walkdir = "2.4.0"
