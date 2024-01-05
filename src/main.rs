@@ -25,13 +25,13 @@ struct Args {
     #[clap(long, default_value = "")]
     subpath: String,
     #[clap(long, default_value = "true")]
-    ignore_hidden_directories: bool,
+    ignore_hidden_directories: Option<bool>,
     #[clap(long, default_values = ["yml", "yaml"])]
     supported_extensions: Vec<String>,
     #[clap(long, default_value = "300")]
     full_run_interval_seconds: u64,
     #[clap(long, default_value = "9100")]
-    metrics_port: u16,
+    webserver_port: u16,
 }
 
 #[derive(Clone)]
@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
             .route("/metrics", get(prometheus::gather_metrics))
             .route("/webhook", post(webhook))
             .with_state(AppState(reconcile_args, webserver_full_path));
-        let bind = format!("0.0.0.0:{}", args.metrics_port);
+        let bind = format!("0.0.0.0:{}", args.webserver_port);
         let listener = TcpListener::bind(&bind).await.unwrap();
         info!("listening on {}", &bind);
         axum::serve(listener, app).await.unwrap();
@@ -139,7 +139,7 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
 fn should_be_applied(path: &Path, args: &Args) -> bool {
     let path_str = path.to_str().unwrap();
 
-    if args.ignore_hidden_directories {
+    if args.ignore_hidden_directories.is_some_and(|b| b == true) {
         if path
             .components()
             .find(|e| {
