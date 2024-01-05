@@ -40,14 +40,16 @@ struct AppState(Args, String);
 async fn webhook(State(state): State<AppState>, headers: HeaderMap) -> String {
     info!("Got a webhook call with headers: {:?}", headers);
     let client = Client::try_default().await.unwrap();
-    info!("starting webhook run");
-    match reconcile(&state.0, &state.1, &client).await {
-        Err(e) => {
-            info!("reconcile error: {:?}", e);
-        }
-        Ok(_) => {}
-    };
-    info!("webhook run complete");
+    tokio::spawn(async move {
+        info!("spawning webhook run");
+        match reconcile(&state.0, &state.1, &client).await {
+            Err(e) => {
+                info!("reconcile error: {:?}", e);
+            }
+            Ok(_) => {}
+        };
+        info!("webhook run complete");
+    });
     "ok".to_string()
 }
 
