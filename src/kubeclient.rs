@@ -35,14 +35,10 @@ fn dynamic_api(
 }
 
 // https://github.com/kube-rs/kube/blob/main/examples/kubectl.rs#L156
-pub async fn apply(
-    client: Client,
-    discovery: &Discovery,
-    path: &str,
-    user_agent: &str,
-) -> Result<()> {
+pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<()> {
     let ssapply = PatchParams::apply(user_agent).force();
     let yaml = std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
+    let discovery = Discovery::new(client.clone()).run().await.unwrap();
     for doc in multidoc_deserialize(&yaml)? {
         let obj: DynamicObject = serde_yaml::from_value(doc)?;
         let namespace = obj.metadata.namespace.as_deref();

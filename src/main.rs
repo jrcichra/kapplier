@@ -1,10 +1,15 @@
 use anyhow::{Context, Result};
-use axum::{routing::get, Router};
+use axum::{
+    extract::State,
+    http::HeaderMap,
+    routing::{get, post},
+    Router,
+};
 use clap::Parser;
-use kube::{Client, Discovery};
+use kube::Client;
 use log::{info, trace};
 use prometheus::{FILE_APPLY_COUNT, RUN_LATENCY};
-use std::{path::Path, process, thread, time::Duration};
+use std::{path::Path, process, time::Duration};
 use tokio::{net::TcpListener, time::Instant};
 use walkdir::WalkDir;
 pub mod kubeclient;
@@ -29,6 +34,23 @@ struct Args {
     metrics_port: u16,
 }
 
+#[derive(Clone)]
+struct AppState(Args, String);
+
+async fn webhook(State(state): State<AppState>, headers: HeaderMap) -> String {
+    info!("Got a webhook call with headers: {:?}", headers);
+    let client = Client::try_default().await.unwrap();
+    info!("starting webhook run");
+    match reconcile(&state.0, &state.1, &client).await {
+        Err(e) => {
+            info!("reconcile error: {:?}", e);
+        }
+        Ok(_) => {}
+    };
+    info!("webhook run complete");
+    "ok".to_string()
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // setup
@@ -49,78 +71,44 @@ async fn main() -> Result<()> {
     })?;
 
     // web server for metrics
-    let metrics_task = tokio::spawn(async move {
-        let app = Router::new().route("/metrics", get(prometheus::gather_metrics));
+    let webserver_full_path = full_path.clone();
+    let webserver_task = tokio::spawn(async move {
+        let app = Router::new()
+            .route("/metrics", get(prometheus::gather_metrics))
+            .route("/webhook", post(webhook))
+            .with_state(AppState(reconcile_args, webserver_full_path));
         let bind = format!("0.0.0.0:{}", args.metrics_port);
         let listener = TcpListener::bind(&bind).await.unwrap();
         info!("listening on {}", &bind);
         axum::serve(listener, app).await.unwrap();
     });
 
-    // wait for directory to exist
-    info!("waiting for path to exist: {}...", &full_path);
-    while !Path::new(&full_path).exists() {
-        thread::sleep(Duration::from_secs(1));
-    }
-
     let full_path_clone = full_path.clone();
     let full_run_task = tokio::spawn(async move {
         let args = full_run_args;
         // TODO: proper error handling
         let client = Client::try_default().await.unwrap();
-        let discovery = Discovery::new(client.clone()).run().await.unwrap();
         loop {
+            tokio::time::sleep(Duration::from_secs(args.full_run_interval_seconds)).await;
             info!("starting full run");
-            match reconcile(&args, &full_path_clone, &client, &discovery).await {
+            match reconcile(&args, &full_path_clone, &client).await {
                 Err(e) => {
                     info!("reconcile error: {:?}", e);
                 }
                 Ok(_) => {}
             };
             info!("full run complete");
-            tokio::time::sleep(Duration::from_secs(args.full_run_interval_seconds)).await;
-        }
-    });
-
-    let reconcile_task = tokio::spawn(async move {
-        let args = reconcile_args;
-        // TODO: proper error handling
-        let client = Client::try_default().await.unwrap();
-        let discovery = Discovery::new(client.clone()).run().await.unwrap();
-        let mut last_git_link = tokio::fs::read_link(&args.path).await.unwrap();
-        loop {
-            // TODO: replace with inotify on the .git file contents
-            let current_git_link = tokio::fs::read_link(&args.path).await.unwrap();
-            if last_git_link != current_git_link {
-                info!("starting commit change run");
-                match reconcile(&args, &full_path, &client, &discovery).await {
-                    Err(e) => {
-                        info!("reconcile error: {:?}", e);
-                    }
-                    Ok(_) => {}
-                };
-                info!("commit change run complete");
-            }
-            last_git_link = current_git_link;
-            // check if the file contents match every second
-            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
 
     // wait for threads to finish
-    metrics_task.await?;
+    webserver_task.await?;
     full_run_task.await?;
-    reconcile_task.await?;
 
     Ok(())
 }
 
-async fn reconcile(
-    args: &Args,
-    full_path: &str,
-    client: &Client,
-    discovery: &Discovery,
-) -> Result<()> {
+async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> {
     let walker = WalkDir::new(full_path).sort_by_file_name().into_iter();
     for entry in walker {
         let entry = entry.context("could not unwrap entry")?;
@@ -131,8 +119,7 @@ async fn reconcile(
         }
         // trigger a kubectl apply update
         let now = Instant::now();
-        let res =
-            kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent).await;
+        let res = kubeclient::apply(client.to_owned(), path_str, &args.user_agent).await;
         let elapsed = now.elapsed();
         let success = &res.is_ok().to_string();
 
