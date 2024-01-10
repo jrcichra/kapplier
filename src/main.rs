@@ -18,19 +18,19 @@ pub mod prometheus;
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(long, default_value = "kapplier")]
+    #[clap(long, env, default_value = "kapplier")]
     user_agent: String,
-    #[clap(long, default_value = "repo")]
+    #[clap(long, env, default_value = "repo")]
     path: String,
-    #[clap(long, default_value = "")]
+    #[clap(long, env, default_value = "")]
     subpath: String,
-    #[clap(long, default_value = "true")]
-    ignore_hidden_directories: Option<bool>,
-    #[clap(long, default_values = ["yml", "yaml"])]
+    #[clap(long, env, default_value = "true")]
+    ignore_hidden_directories: bool,
+    #[clap(long, env,default_values = ["yml", "yaml"])]
     supported_extensions: Vec<String>,
-    #[clap(long, default_value = "300")]
+    #[clap(long, env, default_value = "300")]
     full_run_interval_seconds: u64,
-    #[clap(long, default_value = "9100")]
+    #[clap(long, env, default_value = "9100")]
     webserver_port: u16,
 }
 
@@ -141,7 +141,7 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
 fn should_be_applied(path: &Path, args: &Args) -> bool {
     let path_str = path.to_str().unwrap();
 
-    if args.ignore_hidden_directories.is_some_and(|b| b == true) {
+    if args.ignore_hidden_directories {
         if path
             .components()
             .find(|e| {
