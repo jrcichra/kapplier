@@ -34,7 +34,7 @@ spec:
         - args:
             - --path=/repo/kapplier.git
             - --subpath=deploy
-          image: ghcr.io/jrcichra/kapplier:sha-09e378a4
+          image: ghcr.io/jrcichra/kapplier
           name: kapplier
           resources:
             limits:
