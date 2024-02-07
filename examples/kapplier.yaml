@@ -1,0 +1,74 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kapplier-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: kapplier
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kapplier
+  namespace: kapplier
+spec:
+  selector:
+    matchLabels:
+      app: kapplier
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9100"
+        prometheus.io/scrape: "true"
+      labels:
+        app: kapplier
+    spec:
+      containers:
+        - args:
+            - --path=/repo/kapplier.git
+            - --subpath=deploy
+          image: ghcr.io/jrcichra/kapplier:sha-09e378a4
+          name: kapplier
+          resources:
+            limits:
+              cpu: 300m
+              memory: 256Mi
+            requests:
+              cpu: 10m
+              memory: 8Mi
+          volumeMounts:
+            - mountPath: /repo
+              name: repo
+              readOnly: true
+        - args:
+            - --webhook-url=http://127.0.0.1:9100/webhook
+          env:
+            - name: GITSYNC_REPO
+              value: https://github.com/jrcichra/kapplier.git
+            - name: GITSYNC_ROOT
+              value: /repo
+          image: registry.k8s.io/git-sync/git-sync:v4.1.0
+          name: git-sync
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 8Mi
+          volumeMounts:
+            - mountPath: /repo
+              name: repo
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      volumes:
+        - emptyDir: {}
+          name: repo
