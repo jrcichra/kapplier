@@ -6,6 +6,10 @@ No GUI, no `git`, no `kubectl`. Only requires a directory to watch.
 
 Expected to be used with a [git-sync](https://github.com/kubernetes/git-sync) sidecar >=v4.
 
+# Examples
+
+See [examples/kapplier.yaml](./examples/kapplier.yaml)
+
 ```
 Usage: kapplier [OPTIONS]
 
