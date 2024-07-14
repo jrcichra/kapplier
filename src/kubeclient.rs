@@ -38,7 +38,7 @@ fn dynamic_api(
 pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<()> {
     let ssapply = PatchParams::apply(user_agent).force();
     let yaml = std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
-    let discovery = Discovery::new(client.clone()).run().await.unwrap();
+    let discovery = Discovery::new(client.clone()).run().await?;
     for doc in multidoc_deserialize(&yaml)? {
         let obj: DynamicObject = serde_yaml::from_value(doc)?;
         let namespace = obj.metadata.namespace.as_deref();

@@ -39,9 +39,9 @@ struct AppState(Args, String);
 
 async fn webhook(State(state): State<AppState>, headers: HeaderMap) -> String {
     info!("Got a webhook call with headers: {:?}", headers);
-    let client = Client::try_default().await.unwrap();
     tokio::spawn(async move {
         info!("spawning webhook run");
+        let client = Client::try_default().await.unwrap(); // this unwrap happens in a thread that gets dynamically spawned
         match reconcile(&state.0, &state.1, &client).await {
             Err(e) => {
                 info!("reconcile error: {:?}", e);
@@ -88,11 +88,16 @@ async fn main() -> Result<()> {
     let full_path_clone = full_path.clone();
     let full_run_task = tokio::spawn(async move {
         let args = full_run_args;
-        // TODO: proper error handling
-        let client = Client::try_default().await.unwrap();
         loop {
             tokio::time::sleep(Duration::from_secs(args.full_run_interval_seconds)).await;
             info!("starting full run");
+            let client = match Client::try_default().await {
+                Ok(client) => client,
+                Err(e) => {
+                    info!("full run client error: {:?}", e);
+                    continue;
+                }
+            };
             match reconcile(&args, &full_path_clone, &client).await {
                 Err(e) => {
                     info!("reconcile error: {:?}", e);
