@@ -21,5 +21,5 @@ serde = "1.0.204"
 serde_json = "1.0.120"
 serde_yaml = "0.9.33"
 simple_logger = "5.0.0"
-tokio = { version = "1.38.1", features = ["full"] }
+tokio = { version = "1.39.1", features = ["full"] }
 walkdir = "2.5.0"
