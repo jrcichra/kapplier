@@ -6,5 +6,4 @@ COPY target/x86_64-unknown-linux-gnu/release/kapplier kapplier-amd64
 FROM gcr.io/distroless/cc-debian12:nonroot
 ARG TARGETARCH
 COPY --from=rename /app/kapplier-$TARGETARCH /app/kapplier
-USER 65534
 ENTRYPOINT [ "/app/kapplier" ]
