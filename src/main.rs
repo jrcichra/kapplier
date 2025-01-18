@@ -7,7 +7,7 @@ use axum::{
 };
 use clap::Parser;
 use kube::Client;
-use log::{error, info, trace};
+use log::{info, trace};
 use prometheus::{FILE_APPLY_COUNT, RUN_LATENCY};
 use std::{path::Path, process, time::Duration};
 use tokio::{net::TcpListener, time::Instant};
@@ -128,18 +128,14 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
         let now = Instant::now();
         let res = kubeclient::apply(client.to_owned(), path_str, &args.user_agent).await;
         let elapsed = now.elapsed();
-        let success = &res.is_ok().to_string();
+        let success = (res.is_ok() && res.ok().unwrap() == 0).to_string();
 
         RUN_LATENCY
-            .with_label_values(&[success, path_str])
+            .with_label_values(&[&success, path_str])
             .set(elapsed.as_secs_f64());
         FILE_APPLY_COUNT
-            .with_label_values(&[success, path_str])
+            .with_label_values(&[&success, path_str])
             .inc();
-
-        if let Err(e) = res {
-            error!("error during apply: {}", e);
-        }
     }
     Ok(())
 }

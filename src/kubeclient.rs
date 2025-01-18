@@ -35,7 +35,8 @@ fn dynamic_api(
 }
 
 // https://github.com/kube-rs/kube/blob/main/examples/kubectl.rs#L156
-pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<()> {
+pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<i64> {
+    let mut failures = 0;
     let ssapply = PatchParams::apply(user_agent).force();
     let yaml = std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
     let discovery = Discovery::new(client.clone()).run().await?;
@@ -51,11 +52,16 @@ pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<()> {
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, client.clone(), namespace, false);
             let data: serde_json::Value = serde_json::to_value(&obj)?;
-            let _r = api.patch(&name, &ssapply, &Patch::Apply(data)).await?;
-            info!("applied {}: {} {}", path, gvk.kind, name);
+            if let Err(e) = api.patch(&name, &ssapply, &Patch::Apply(data)).await {
+                warn!("error during apply {}: {} {}: {}", path, gvk.kind, name, e);
+                failures += 1;
+            } else {
+                info!("applied {}: {} {}", path, gvk.kind, name);
+            }
         } else {
             warn!("cannot apply document for unknown {:?}", gvk);
+            failures += 1;
         }
     }
-    Ok(())
+    Ok(failures)
 }
