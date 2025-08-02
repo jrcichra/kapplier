@@ -131,10 +131,10 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
         let success = (res.is_ok() && res.ok().unwrap() == 0).to_string();
 
         RUN_LATENCY
-            .with_label_values(&[&success, path_str])
+            .with_label_values(&[success.clone(), path_str.to_owned()])
             .set(elapsed.as_secs_f64());
         FILE_APPLY_COUNT
-            .with_label_values(&[&success, path_str])
+            .with_label_values(&[success, path_str.to_owned()])
             .inc();
     }
     Ok(())
