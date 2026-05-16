@@ -2,34 +2,54 @@
 
 A simpler (and faster) alternative to [kube-applier](https://github.com/box/kube-applier).
 
-No GUI, no `git`, no `kubectl`. Only requires a directory to watch.
+Watches a directory for YAML files and runs `kubectl apply` on them — on a fixed interval and/or triggered by a webhook. No GUI, no `git`, no `kubectl` binary required.
 
-Expected to be used with a [git-sync](https://github.com/kubernetes/git-sync) sidecar >=v4.
+Intended to be used with a [git-sync](https://github.com/kubernetes/git-sync) sidecar (>=v4), which syncs a git repo to disk and calls the webhook after each sync.
 
-# Examples
+## Endpoints
 
-See [examples/kapplier.yaml](./examples/kapplier.yaml)
+| Endpoint | Method | Description |
+|---|---|---|
+| `/webhook` | POST | Trigger an immediate reconcile run |
+| `/metrics` | GET | Prometheus metrics |
+
+### Metrics
+
+| Metric | Labels | Description |
+|---|---|---|
+| `file_apply_count` | `success`, `file` | Number of times each file has been applied |
+| `run_latency_seconds` | `success`, `file` | Time taken to apply each file |
+
+## Configuration
+
+All options can be set as CLI flags or environment variables.
 
 ```
 Usage: kapplier [OPTIONS]
 
 Options:
       --user-agent <USER_AGENT>
-          [default: kapplier]
+          [env: USER_AGENT] [default: kapplier]
       --path <PATH>
-          [default: repo]
+          [env: PATH] [default: repo]
       --subpath <SUBPATH>
-          [default: ]
+          [env: SUBPATH] [default: ]
       --ignore-hidden-directories <IGNORE_HIDDEN_DIRECTORIES>
-          [default: true] [possible values: true, false]
+          [env: IGNORE_HIDDEN_DIRECTORIES] [default: true] [possible values: true, false]
       --supported-extensions <SUPPORTED_EXTENSIONS>
-          [default: yml yaml]
+          [env: SUPPORTED_EXTENSIONS] [default: yml yaml]
       --full-run-interval-seconds <FULL_RUN_INTERVAL_SECONDS>
-          [default: 300]
+          [env: FULL_RUN_INTERVAL_SECONDS] [default: 300]
       --webserver-port <WEBSERVER_PORT>
-          [default: 9100]
+          [env: WEBSERVER_PORT] [default: 9100]
   -h, --help
           Print help
   -V, --version
           Print version
 ```
+
+## Example
+
+See [examples/kapplier.yaml](./examples/kapplier.yaml) for a full Kubernetes deployment with a git-sync sidecar.
+
+The example configures git-sync to sync a repo to `/repo` and call the webhook after each sync, while kapplier watches `/repo/kapplier.git/deploy` for YAML files to apply.
