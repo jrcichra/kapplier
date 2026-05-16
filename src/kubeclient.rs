@@ -38,14 +38,14 @@ fn dynamic_api(
     }
 }
 
-fn annotation_matches(obj: &DynamicObject, filter: &str) -> bool {
-    let annotations = match obj.metadata.annotations.as_ref() {
-        Some(a) => a,
+fn metadata_filter(map: Option<&std::collections::BTreeMap<String, String>>, filter: &str) -> bool {
+    let m = match map {
+        Some(m) => m,
         None => return false,
     };
     match filter.split_once('=') {
-        Some((key, val)) => annotations.get(key).map_or(false, |v| v == val),
-        None => annotations.contains_key(filter),
+        Some((key, val)) => m.get(key).map_or(false, |v| v == val),
+        None => m.contains_key(filter),
     }
 }
 
@@ -56,6 +56,7 @@ pub async fn apply(
     path: &str,
     user_agent: &str,
     filter_annotation: Option<&str>,
+    filter_label: Option<&str>,
 ) -> Result<i64> {
     let mut failures = 0;
     let ssapply = PatchParams::apply(user_agent).force();
@@ -71,8 +72,14 @@ pub async fn apply(
         let name = obj.name_any();
 
         if let Some(filter) = filter_annotation {
-            if !annotation_matches(&obj, filter) {
+            if !metadata_filter(obj.metadata.annotations.as_ref(), filter) {
                 trace!("skipping {}: {} {} (annotation filter)", path, gvk.kind, name);
+                continue;
+            }
+        }
+        if let Some(filter) = filter_label {
+            if !metadata_filter(obj.metadata.labels.as_ref(), filter) {
+                trace!("skipping {}: {} {} (label filter)", path, gvk.kind, name);
                 continue;
             }
         }

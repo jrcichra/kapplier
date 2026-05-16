@@ -46,6 +46,8 @@ Options:
           [env: WEBSERVER_PORT] [default: 9100]
       --filter-annotation <FILTER_ANNOTATION>
           [env: FILTER_ANNOTATION] Only apply documents with this annotation (e.g. kapplier.io/managed=true or just kapplier.io/managed)
+      --filter-label <FILTER_LABEL>
+          [env: FILTER_LABEL] Only apply documents with this label (e.g. app=myapp or just app)
   -h, --help
           Print help
   -V, --version

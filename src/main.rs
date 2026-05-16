@@ -35,6 +35,9 @@ struct Args {
     /// Only apply documents that have this annotation. Format: key=value or just key to check presence.
     #[clap(long, env)]
     filter_annotation: Option<String>,
+    /// Only apply documents that have this label. Format: key=value or just key to check presence.
+    #[clap(long, env)]
+    filter_label: Option<String>,
 }
 
 #[derive(Clone)]
@@ -128,6 +131,7 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
     let start = Instant::now();
     let discovery = kubeclient::run_discovery(client.clone()).await?;
     let filter = args.filter_annotation.as_deref();
+    let filter_label = args.filter_label.as_deref();
 
     let mut total_failures: i64 = 0;
     let mut file_count = 0;
@@ -142,7 +146,7 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
         }
         file_count += 1;
         let now = Instant::now();
-        let res = kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent, filter).await;
+        let res = kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent, filter, filter_label).await;
         let elapsed = now.elapsed();
         let success = matches!(res, Ok(0)).to_string();
 
