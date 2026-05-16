@@ -41,7 +41,13 @@ async fn webhook(State(state): State<AppState>, headers: HeaderMap) -> String {
     info!("Got a webhook call with headers: {:?}", headers);
     tokio::spawn(async move {
         info!("spawning webhook run");
-        let client = Client::try_default().await.unwrap(); // this unwrap happens in a thread that gets dynamically spawned
+        let client = match Client::try_default().await {
+            Ok(c) => c,
+            Err(e) => {
+                info!("webhook client error: {:?}", e);
+                return;
+            }
+        };
         match reconcile(&state.0, &state.1, &client).await {
             Err(e) => {
                 info!("reconcile error: {:?}", e);
@@ -59,7 +65,6 @@ async fn main() -> Result<()> {
     simple_logger::init_with_level(log::Level::Info)?;
     let args = Args::parse();
     let full_run_args = args.clone();
-    let reconcile_args: Args = args.clone();
     let mut full_path = args.path.clone();
     if !args.subpath.is_empty() {
         full_path = format!("{}/{}", &args.path, &args.subpath);
@@ -74,12 +79,13 @@ async fn main() -> Result<()> {
 
     // web server for metrics
     let webserver_full_path = full_path.clone();
+    let webserver_port = args.webserver_port;
     let webserver_task = tokio::spawn(async move {
         let app = Router::new()
             .route("/metrics", get(prometheus::gather_metrics))
             .route("/webhook", post(webhook))
-            .with_state(AppState(reconcile_args, webserver_full_path));
-        let bind = format!("0.0.0.0:{}", args.webserver_port);
+            .with_state(AppState(args, webserver_full_path));
+        let bind = format!("0.0.0.0:{}", webserver_port);
         let listener = TcpListener::bind(&bind).await.unwrap();
         info!("listening on {}", &bind);
         axum::serve(listener, app).await.unwrap();
@@ -128,7 +134,7 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
         let now = Instant::now();
         let res = kubeclient::apply(client.to_owned(), path_str, &args.user_agent).await;
         let elapsed = now.elapsed();
-        let success = (res.is_ok() && res.ok().unwrap() == 0).to_string();
+        let success = matches!(res, Ok(0)).to_string();
 
         RUN_LATENCY
             .with_label_values(&[success.clone(), path_str.to_owned()])
@@ -141,17 +147,20 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
 }
 
 fn should_be_applied(path: &Path, args: &Args) -> bool {
-    let path_str = path.to_str().unwrap();
+    let path_str = match path.to_str() {
+        Some(s) => s,
+        None => return false,
+    };
 
     if args.ignore_hidden_directories {
         if path
             .components()
             .find(|e| {
-                let string = e.as_os_str().to_str().unwrap();
-                if string.starts_with(".") && string.len() > 1 {
-                    return true;
-                }
-                return false;
+                let string = match e.as_os_str().to_str() {
+                    Some(s) => s,
+                    None => return false,
+                };
+                string.starts_with('.') && string.len() > 1
             })
             .is_some()
         {
@@ -162,10 +171,11 @@ fn should_be_applied(path: &Path, args: &Args) -> bool {
 
     // ignore files without the supported extension
     if let Some(extension) = path.extension() {
-        if !&args
-            .supported_extensions
-            .contains(&extension.to_str().unwrap().to_string())
-        {
+        let ext_str = match extension.to_str() {
+            Some(s) => s,
+            None => return false,
+        };
+        if !args.supported_extensions.contains(&ext_str.to_string()) {
             trace!("extension is ignored: {}", path_str);
             return false;
         }
@@ -173,5 +183,5 @@ fn should_be_applied(path: &Path, args: &Args) -> bool {
         trace!("no extension is ignored: {}", path_str);
         return false;
     }
-    return true;
+    true
 }
