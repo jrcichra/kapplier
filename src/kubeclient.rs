@@ -5,7 +5,11 @@ use kube::{
     discovery::{ApiCapabilities, ApiResource, Scope},
     Api, Client, Discovery, ResourceExt,
 };
-use log::{info, warn};
+use log::{info, trace, warn};
+
+pub async fn run_discovery(client: Client) -> Result<Discovery> {
+    Ok(Discovery::new(client).run().await?)
+}
 
 // https://github.com/kube-rs/kube/blob/main/examples/kubectl.rs#L249
 fn multidoc_deserialize(data: &str) -> Result<Vec<serde_yaml::Value>> {
@@ -34,12 +38,28 @@ fn dynamic_api(
     }
 }
 
+fn annotation_matches(obj: &DynamicObject, filter: &str) -> bool {
+    let annotations = match obj.metadata.annotations.as_ref() {
+        Some(a) => a,
+        None => return false,
+    };
+    match filter.split_once('=') {
+        Some((key, val)) => annotations.get(key).map_or(false, |v| v == val),
+        None => annotations.contains_key(filter),
+    }
+}
+
 // https://github.com/kube-rs/kube/blob/main/examples/kubectl.rs#L156
-pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<i64> {
+pub async fn apply(
+    client: Client,
+    discovery: &Discovery,
+    path: &str,
+    user_agent: &str,
+    filter_annotation: Option<&str>,
+) -> Result<i64> {
     let mut failures = 0;
     let ssapply = PatchParams::apply(user_agent).force();
     let yaml = std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
-    let discovery = Discovery::new(client.clone()).run().await?;
     for doc in multidoc_deserialize(&yaml)? {
         let obj: DynamicObject = serde_yaml::from_value(doc)?;
         let namespace = obj.metadata.namespace.as_deref();
@@ -49,6 +69,14 @@ pub async fn apply(client: Client, path: &str, user_agent: &str) -> Result<i64> 
             bail!("cannot apply object without valid TypeMeta {:?}", obj);
         };
         let name = obj.name_any();
+
+        if let Some(filter) = filter_annotation {
+            if !annotation_matches(&obj, filter) {
+                trace!("skipping {}: {} {} (annotation filter)", path, gvk.kind, name);
+                continue;
+            }
+        }
+
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, client.clone(), namespace, false);
             let data: serde_json::Value = serde_json::to_value(&obj)?;

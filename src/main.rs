@@ -8,7 +8,7 @@ use axum::{
 use clap::Parser;
 use kube::Client;
 use log::{info, trace};
-use prometheus::{FILE_APPLY_COUNT, RUN_LATENCY};
+use prometheus::{FILE_APPLY_COUNT, RECONCILE_DURATION_SECONDS, RECONCILE_FAILURE_COUNT, RUN_LATENCY};
 use std::{path::Path, process, time::Duration};
 use tokio::{net::TcpListener, time::Instant};
 use walkdir::WalkDir;
@@ -26,12 +26,15 @@ struct Args {
     subpath: String,
     #[clap(long, env, default_value = "true")]
     ignore_hidden_directories: bool,
-    #[clap(long, env,default_values = ["yml", "yaml"])]
+    #[clap(long, env, default_values = ["yml", "yaml"])]
     supported_extensions: Vec<String>,
     #[clap(long, env, default_value = "300")]
     full_run_interval_seconds: u64,
     #[clap(long, env, default_value = "9100")]
     webserver_port: u16,
+    /// Only apply documents that have this annotation. Format: key=value or just key to check presence.
+    #[clap(long, env)]
+    filter_annotation: Option<String>,
 }
 
 #[derive(Clone)]
@@ -122,6 +125,13 @@ async fn main() -> Result<()> {
 }
 
 async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> {
+    let start = Instant::now();
+    let discovery = kubeclient::run_discovery(client.clone()).await?;
+    let filter = args.filter_annotation.as_deref();
+
+    let mut total_failures: i64 = 0;
+    let mut file_count = 0;
+
     let walker = WalkDir::new(full_path).sort_by_file_name().into_iter();
     for entry in walker {
         let entry = entry.context("could not unwrap entry")?;
@@ -130,11 +140,15 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
         if !should_be_applied(path, args) {
             continue;
         }
-        // trigger a kubectl apply update
+        file_count += 1;
         let now = Instant::now();
-        let res = kubeclient::apply(client.to_owned(), path_str, &args.user_agent).await;
+        let res = kubeclient::apply(client.to_owned(), &discovery, path_str, &args.user_agent, filter).await;
         let elapsed = now.elapsed();
         let success = matches!(res, Ok(0)).to_string();
+
+        if let Ok(failures) = &res {
+            total_failures += failures;
+        }
 
         RUN_LATENCY
             .with_label_values(&[success.clone(), path_str.to_owned()])
@@ -143,6 +157,17 @@ async fn reconcile(args: &Args, full_path: &str, client: &Client) -> Result<()> 
             .with_label_values(&[success, path_str.to_owned()])
             .inc();
     }
+
+    let elapsed = start.elapsed();
+    RECONCILE_DURATION_SECONDS.set(elapsed.as_secs_f64());
+    RECONCILE_FAILURE_COUNT.set(total_failures as f64);
+    info!(
+        "reconcile complete: {} files in {:.2}s, {} failures",
+        file_count,
+        elapsed.as_secs_f64(),
+        total_failures
+    );
+
     Ok(())
 }
 

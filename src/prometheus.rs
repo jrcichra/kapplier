@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use prometheus::{self, register_gauge_vec, Encoder, GaugeVec, TextEncoder};
+use prometheus::{self, register_gauge, register_gauge_vec, Encoder, Gauge, GaugeVec, TextEncoder};
 
 // maintain compatibility with existing kube-applier metrics
 lazy_static! {
@@ -16,6 +16,18 @@ lazy_static! {
         "run_latency_seconds",
         "Latency for completed apply runs",
         &["success","file"]
+    )
+    .unwrap();
+
+    pub static ref RECONCILE_DURATION_SECONDS: Gauge = register_gauge!(
+        "reconcile_duration_seconds",
+        "Total wall-clock time for a full reconcile run"
+    )
+    .unwrap();
+
+    pub static ref RECONCILE_FAILURE_COUNT: Gauge = register_gauge!(
+        "reconcile_failure_count",
+        "Number of apply failures in the last reconcile run"
     )
     .unwrap();
 }

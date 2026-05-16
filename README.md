@@ -19,6 +19,8 @@ Intended to be used with a [git-sync](https://github.com/kubernetes/git-sync) si
 |---|---|---|
 | `file_apply_count` | `success`, `file` | Number of times each file has been applied |
 | `run_latency_seconds` | `success`, `file` | Time taken to apply each file |
+| `reconcile_duration_seconds` | — | Total wall-clock time for the last reconcile run |
+| `reconcile_failure_count` | — | Number of apply failures in the last reconcile run |
 
 ## Configuration
 
@@ -42,6 +44,8 @@ Options:
           [env: FULL_RUN_INTERVAL_SECONDS] [default: 300]
       --webserver-port <WEBSERVER_PORT>
           [env: WEBSERVER_PORT] [default: 9100]
+      --filter-annotation <FILTER_ANNOTATION>
+          [env: FILTER_ANNOTATION] Only apply documents with this annotation (e.g. kapplier.io/managed=true or just kapplier.io/managed)
   -h, --help
           Print help
   -V, --version
