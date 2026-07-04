@@ -18,25 +18,25 @@ pub mod prometheus;
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(long, env, default_value = "kapplier")]
+    #[clap(long, env = "KAPPLIER_USER_AGENT", default_value = "kapplier")]
     user_agent: String,
-    #[clap(long, env, default_value = "repo")]
+    #[clap(long, env = "KAPPLIER_PATH", default_value = "repo")]
     path: String,
-    #[clap(long, env, default_value = "")]
+    #[clap(long, env = "KAPPLIER_SUBPATH", default_value = "")]
     subpath: String,
-    #[clap(long, env, default_value = "true")]
+    #[clap(long, env = "KAPPLIER_IGNORE_HIDDEN_DIRECTORIES", action = clap::ArgAction::Set, default_value = "true")]
     ignore_hidden_directories: bool,
-    #[clap(long, env, default_values = ["yml", "yaml"])]
+    #[clap(long, env = "KAPPLIER_SUPPORTED_EXTENSIONS", default_values = ["yml", "yaml"])]
     supported_extensions: Vec<String>,
-    #[clap(long, env, default_value = "300")]
+    #[clap(long, env = "KAPPLIER_FULL_RUN_INTERVAL_SECONDS", default_value = "300")]
     full_run_interval_seconds: u64,
-    #[clap(long, env, default_value = "9100")]
+    #[clap(long, env = "KAPPLIER_WEBSERVER_PORT", default_value = "9100")]
     webserver_port: u16,
     /// Only apply documents that have this annotation. Format: key=value or just key to check presence.
-    #[clap(long, env)]
+    #[clap(long, env = "KAPPLIER_FILTER_ANNOTATION")]
     filter_annotation: Option<String>,
     /// Only apply documents that have this label. Format: key=value or just key to check presence.
-    #[clap(long, env)]
+    #[clap(long, env = "KAPPLIER_FILTER_LABEL")]
     filter_label: Option<String>,
 }
 
@@ -120,9 +120,9 @@ async fn main() -> Result<()> {
         }
     });
 
-    // wait for threads to finish
-    webserver_task.await?;
-    full_run_task.await?;
+    // wait for threads to finish; if either task ends (panics or returns), surface it immediately
+    // instead of staying blocked on the other one forever.
+    tokio::try_join!(webserver_task, full_run_task)?;
 
     Ok(())
 }

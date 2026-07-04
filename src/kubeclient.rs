@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use kube::{
     api::{Patch, PatchParams},
     core::{DynamicObject, GroupVersionKind},
@@ -62,12 +62,29 @@ pub async fn apply(
     let ssapply = PatchParams::apply(user_agent).force();
     let yaml = std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
     for doc in multidoc_deserialize(&yaml)? {
-        let obj: DynamicObject = serde_yaml::from_value(doc)?;
+        let obj: DynamicObject = match serde_yaml::from_value(doc) {
+            Ok(obj) => obj,
+            Err(e) => {
+                warn!("error deserializing document in {}: {}", path, e);
+                failures += 1;
+                continue;
+            }
+        };
         let namespace = obj.metadata.namespace.as_deref();
-        let gvk = if let Some(tm) = &obj.types {
-            GroupVersionKind::try_from(tm)?
-        } else {
-            bail!("cannot apply object without valid TypeMeta {:?}", obj);
+        let gvk = match &obj.types {
+            Some(tm) => match GroupVersionKind::try_from(tm) {
+                Ok(gvk) => gvk,
+                Err(e) => {
+                    warn!("error resolving GVK for {}: {:?}: {}", path, obj, e);
+                    failures += 1;
+                    continue;
+                }
+            },
+            None => {
+                warn!("cannot apply object without valid TypeMeta {}: {:?}", path, obj);
+                failures += 1;
+                continue;
+            }
         };
         let name = obj.name_any();
 
@@ -86,7 +103,14 @@ pub async fn apply(
 
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, client.clone(), namespace, false);
-            let data: serde_json::Value = serde_json::to_value(&obj)?;
+            let data: serde_json::Value = match serde_json::to_value(&obj) {
+                Ok(data) => data,
+                Err(e) => {
+                    warn!("error serializing {}: {} {}: {}", path, gvk.kind, name, e);
+                    failures += 1;
+                    continue;
+                }
+            };
             if let Err(e) = api.patch(&name, &ssapply, &Patch::Apply(data)).await {
                 warn!("error during apply {}: {} {}: {}", path, gvk.kind, name, e);
                 failures += 1;
