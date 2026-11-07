@@ -2,7 +2,7 @@
 
 A simpler (and faster) alternative to [kube-applier](https://github.com/box/kube-applier).
 
-Watches a directory for YAML files and runs `kubectl apply` on them — on a fixed interval and/or triggered by a webhook. No GUI, no `git`, no `kubectl` binary required.
+Applies the YAML files in a directory with server-side apply: on start, on a fixed interval, and when a webhook is called. No GUI, no `git`, no `kubectl` binary required.
 
 Intended to be used with a [git-sync](https://github.com/kubernetes/git-sync) sidecar (>=v4), which syncs a git repo to disk and calls the webhook after each sync.
 
@@ -74,3 +74,16 @@ Options:
 See [examples/kapplier.yaml](./examples/kapplier.yaml) for a full Kubernetes deployment with a git-sync sidecar.
 
 The example configures git-sync to sync a repo to `/repo` and call the webhook after each sync, while kapplier watches `/repo/kapplier.git/deploy` for YAML files to apply.
+
+## Development
+
+```sh
+cargo clippy --all-targets && cargo test
+```
+
+`src/main.rs` has the CLI, web server and run loop; `src/reconcile.rs` one
+run over the directory; `src/apply.rs` one file's documents; `src/metrics.rs`
+the Prometheus metrics. CI builds native amd64 and arm64 binaries and
+publishes `ghcr.io/jrcichra/kapplier` with `latest` and `sha-<8-char commit>`
+tags.
+

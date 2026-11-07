@@ -1,11 +1,13 @@
+//! Prometheus metrics on `/metrics`. Names are kept compatible with
+//! kube-applier:
+//! <https://github.com/box/kube-applier/blob/5e4f51cc613e7518531363ccf3a853b1e70d012c/metrics/prometheus.go>
+
 use prometheus::{
-    register_counter_vec, register_gauge, register_gauge_vec, CounterVec, Gauge, GaugeVec,
-    TextEncoder,
+    CounterVec, Gauge, GaugeVec, TextEncoder, register_counter_vec, register_gauge,
+    register_gauge_vec,
 };
 use std::sync::LazyLock;
 
-// names kept compatible with kube-applier:
-// https://github.com/box/kube-applier/blob/5e4f51cc613e7518531363ccf3a853b1e70d012c/metrics/prometheus.go
 pub static FILE_APPLY_COUNT: LazyLock<CounterVec> = LazyLock::new(|| {
     register_counter_vec!(
         "file_apply_count",
@@ -48,7 +50,8 @@ pub static LAST_RUN_TIMESTAMP_SECONDS: LazyLock<Gauge> = LazyLock::new(|| {
     .expect("register last_run_timestamp_seconds")
 });
 
-pub async fn gather_metrics() -> String {
+/// Axum handler for `/metrics`.
+pub async fn gather() -> String {
     TextEncoder::new()
         .encode_to_string(&prometheus::gather())
         .unwrap_or_else(|e| format!("# failed to encode metrics: {e}\n"))
