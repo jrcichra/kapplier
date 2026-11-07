@@ -12,6 +12,12 @@ use tracing::{info, warn};
 use walkdir::WalkDir;
 
 pub async fn run(args: &Args, full_path: &str, client: &Client) -> Result<()> {
+    // the run on start usually beats git-sync's first clone; its webhook
+    // starts the real first run
+    if !Path::new(full_path).exists() {
+        info!("{full_path} doesn't exist yet (git-sync hasn't synced); skipping");
+        return Ok(());
+    }
     let start = Instant::now();
     let mut files = vec![];
     for entry in WalkDir::new(full_path).sort_by_file_name() {

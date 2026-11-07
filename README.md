@@ -71,7 +71,7 @@ Options:
 
 ## Example
 
-See [examples/kapplier.yaml](./examples/kapplier.yaml) for a full Kubernetes deployment with a git-sync sidecar.
+See [examples/kapplier.yaml](./examples/kapplier.yaml) for a full deployment with a git-sync sidecar: namespace, service account, RBAC, and a hardened pod (non-root, read-only root filesystem, no capabilities). It applies this repo's [`deploy/`](./deploy) directory (a sample nginx Deployment).
 
 The example configures git-sync to sync a repo to `/repo` and call the webhook after each sync, while kapplier watches `/repo/kapplier.git/deploy` for YAML files to apply.
 

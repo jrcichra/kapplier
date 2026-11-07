@@ -1,4 +1,20 @@
+# kapplier applying this repo's deploy/ directory, kept in sync by git-sync.
+# Point GITSYNC_REPO and --path/--subpath at your own repo, and pin both images.
 ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kapplier
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kapplier
+  namespace: kapplier
+---
+# kapplier applies whatever is in the repo, so it needs rights to create all
+# of it. cluster-admin is the simple answer; narrow it to the kinds your repo
+# holds if you can.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -9,7 +25,7 @@ roleRef:
   name: cluster-admin
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: kapplier
     namespace: kapplier
 ---
 apiVersion: apps/v1
@@ -18,6 +34,9 @@ metadata:
   name: kapplier
   namespace: kapplier
 spec:
+  replicas: 1 # runs are serialised in-process; don't run two
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: kapplier
@@ -30,45 +49,62 @@ spec:
       labels:
         app: kapplier
     spec:
+      serviceAccountName: kapplier
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        - args:
+        - name: kapplier
+          image: ghcr.io/jrcichra/kapplier:latest # pin a sha-<commit> tag
+          args:
             - --path=/repo/kapplier.git
             - --subpath=deploy
-          image: ghcr.io/jrcichra/kapplier
-          name: kapplier
           resources:
             limits:
-              cpu: 300m
               memory: 256Mi
             requests:
               cpu: 10m
-              memory: 8Mi
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - mountPath: /repo
               name: repo
               readOnly: true
-        - args:
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.7.1
+          args:
+            # calls kapplier after each sync; kapplier also runs every 5m
             - --webhook-url=http://127.0.0.1:9100/webhook
           env:
             - name: GITSYNC_REPO
               value: https://github.com/jrcichra/kapplier.git
             - name: GITSYNC_ROOT
               value: /repo
-          image: registry.k8s.io/git-sync/git-sync:v4.1.0
-          name: git-sync
           resources:
             limits:
-              cpu: 100m
               memory: 128Mi
             requests:
               cpu: 10m
-              memory: 8Mi
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - mountPath: /repo
               name: repo
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65534
+            - mountPath: /tmp
+              name: tmp
       volumes:
-        - emptyDir: {}
-          name: repo
+        - name: repo
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
